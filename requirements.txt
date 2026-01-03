@@ -1,0 +1,17 @@
+# Sanchez Video Format Requirements
+# Interdimensional Cable Video Format for Rick & Morty
+
+# Core dependencies
+numpy>=1.21.0
+opencv-python>=4.5.0
+
+# For video player (optional but recommended)
+pygame>=2.1.0
+
+# For simple viewer fallback (usually included with Python)
+Pillow>=8.0.0
+
+# Note: ffmpeg must be installed separately for audio extraction/muxing
+# Windows: choco install ffmpeg  OR  download from https://ffmpeg.org
+# Mac: brew install ffmpeg
+# Linux: sudo apt install ffmpeg

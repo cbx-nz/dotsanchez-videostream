@@ -1,0 +1,7 @@
+.venv/
+prompt.txt
+*.mp4
+*.sanchez
+sanchez/__pycache__/
+test_output/
+*.mp3
