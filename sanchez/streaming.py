@@ -56,6 +56,8 @@ class PacketType(IntEnum):
     FRAME_START = 0x10   # Start of a frame
     FRAME_CHUNK = 0x11   # Frame data chunk
     FRAME_END = 0x12     # End of frame marker
+    AUDIO_CONFIG = 0x40  # Audio configuration (sample rate, channels, etc.)
+    AUDIO_CHUNK = 0x41   # Audio data chunk
     SYNC = 0x20          # Synchronization packet (heartbeat)
     FEC_DATA = 0x30      # Forward Error Correction data
     END_STREAM = 0xFF    # End of stream
@@ -303,10 +305,11 @@ class SanchezStreamServer:
         host: str = "0.0.0.0",
         port: int = 9999,
         loop: bool = False,
-        satellite_mode: bool = False
+        satellite_mode: bool = False,
+        audio_path: Optional[str] = None
     ) -> None:
         """
-        Stream a .sanchez file.
+        Stream a .sanchez file with optional audio.
         
         Args:
             sanchez_path: Path to .sanchez file
@@ -314,13 +317,33 @@ class SanchezStreamServer:
             port: Port number
             loop: Loop the video continuously
             satellite_mode: Enable satellite optimizations (smaller chunks, more FEC)
+            audio_path: Path to .mp3 audio file (auto-detected if None)
         """
+        from pathlib import Path
+        
         # Load the sanchez file
         print(f"Loading: {sanchez_path}")
         sanchez = SanchezFile.load(sanchez_path)
         print(f"  Title: {sanchez.metadata.title}")
         print(f"  Size: {sanchez.config.width}x{sanchez.config.height}")
         print(f"  Frames: {sanchez.frame_count}")
+        
+        # Find audio file
+        self.audio_data: Optional[bytes] = None
+        if audio_path is None:
+            # Auto-detect audio file with same name
+            sanchez_file = Path(sanchez_path)
+            auto_audio = sanchez_file.with_suffix('.mp3')
+            if auto_audio.exists():
+                audio_path = str(auto_audio)
+        
+        if audio_path and Path(audio_path).exists():
+            print(f"  Audio: {audio_path}")
+            with open(audio_path, 'rb') as f:
+                self.audio_data = f.read()
+            print(f"  Audio size: {len(self.audio_data) / 1024:.1f} KB")
+        else:
+            print(f"  Audio: None")
         
         self.loop = loop
         
@@ -408,6 +431,10 @@ class SanchezStreamServer:
                 payload=config_payload
             ))
             
+            # Send audio data if available (before frames so client can buffer)
+            if self.audio_data:
+                self._send_audio_data(client_sock, addr)
+            
             # Stream frames
             for frame_idx in range(sanchez.frame_count):
                 if not self.running:
@@ -441,6 +468,50 @@ class SanchezStreamServer:
                 break
             
             print("\nLooping stream...")
+    
+    def _send_audio_data(self, sock_or_addr, addr: tuple) -> None:
+        """Send audio data (MP3) in chunks before video frames"""
+        if not self.audio_data:
+            return
+        
+        audio_chunk_size = self.chunk_size * 4  # Larger chunks for audio
+        total_chunks = (len(self.audio_data) + audio_chunk_size - 1) // audio_chunk_size
+        
+        # Send audio config packet first
+        # Format: total_size (4 bytes) + chunk_count (4 bytes) + format marker "MP3\0"
+        config_payload = struct.pack('>II', len(self.audio_data), total_chunks) + b'MP3\x00'
+        config_packet = StreamPacket(
+            packet_type=PacketType.AUDIO_CONFIG,
+            sequence=self._next_seq(),
+            timestamp=self._get_timestamp(),
+            payload=config_payload
+        )
+        
+        if self.mode == StreamMode.TCP_UNICAST:
+            self._send_tcp_packet(sock_or_addr, config_packet)
+        else:
+            self.socket.sendto(config_packet.serialize(), addr)
+        
+        # Send audio chunks
+        for chunk_idx in range(total_chunks):
+            offset = chunk_idx * audio_chunk_size
+            chunk = self.audio_data[offset:offset + audio_chunk_size]
+            
+            # Payload: chunk_idx (4 bytes) + audio data
+            chunk_payload = struct.pack('>I', chunk_idx) + chunk
+            chunk_packet = StreamPacket(
+                packet_type=PacketType.AUDIO_CHUNK,
+                sequence=self._next_seq(),
+                timestamp=self._get_timestamp(),
+                payload=chunk_payload
+            )
+            
+            if self.mode == StreamMode.TCP_UNICAST:
+                self._send_tcp_packet(sock_or_addr, chunk_packet)
+            else:
+                self.socket.sendto(chunk_packet.serialize(), addr)
+        
+        print(f"  Sent audio: {total_chunks} chunks")
     
     def _send_tcp_packet(self, sock: socket.socket, packet: StreamPacket) -> bool:
         """Send packet over TCP with length prefix"""
@@ -542,6 +613,10 @@ class SanchezStreamServer:
                 )
                 self.socket.sendto(config_packet.serialize(), addr)
                 
+                # Send audio data if available
+                if self.audio_data:
+                    self._send_audio_data(None, addr)
+                
                 # Stream frames
                 for frame_idx in range(sanchez.frame_count):
                     if not self.running:
@@ -622,6 +697,13 @@ class SanchezStreamClient:
         self._frame_buffer: dict = {}  # frame_idx -> {chunks}
         self._completed_frames: queue.Queue = queue.Queue(maxsize=30)
         self._compressor = FrameCompressor()
+        
+        # Audio buffering
+        self._audio_chunks: dict = {}  # chunk_idx -> data
+        self._audio_total_size: int = 0
+        self._audio_total_chunks: int = 0
+        self._audio_format: str = "MP3"
+        self.audio_data: Optional[bytes] = None  # Complete audio when received
         
         # Stats
         self.packets_received = 0
@@ -817,6 +899,26 @@ class SanchezStreamClient:
             frame_idx, stream_time = struct.unpack('>If', packet.payload)
             # Could use for synchronization
             
+        elif packet.packet_type == PacketType.AUDIO_CONFIG:
+            # Parse audio config: total_size (4) + chunk_count (4) + format (4)
+            self._audio_total_size, self._audio_total_chunks = struct.unpack('>II', packet.payload[:8])
+            self._audio_format = packet.payload[8:11].decode('ascii')
+            self._audio_chunks = {}
+            print(f"  Audio: {self._audio_format}, {self._audio_total_size / 1024:.1f} KB, {self._audio_total_chunks} chunks")
+            
+        elif packet.packet_type == PacketType.AUDIO_CHUNK:
+            chunk_idx = struct.unpack('>I', packet.payload[:4])[0]
+            chunk_data = packet.payload[4:]
+            self._audio_chunks[chunk_idx] = chunk_data
+            
+            # Check if all audio chunks received
+            if len(self._audio_chunks) >= self._audio_total_chunks:
+                # Reconstruct audio data
+                self.audio_data = b''.join(
+                    self._audio_chunks[i] for i in sorted(self._audio_chunks.keys())
+                )
+                print(f"  Audio received: {len(self.audio_data)} bytes")
+            
         return None
     
     def get_stats(self) -> dict:
@@ -858,23 +960,45 @@ class SanchezStreamPlayer:
         port: int,
         fullscreen: bool = False
     ) -> None:
-        """Play a stream with pygame display"""
+        """Play a stream with pygame display and audio"""
         try:
             import pygame
         except ImportError:
             raise ImportError("pygame required for stream playback. Install with: pip install pygame")
         
         pygame.init()
+        pygame.mixer.init()
         
         screen = None
         clock = pygame.time.Clock()
         running = True
         frame_count = 0
+        audio_started = False
+        audio_temp_file = None
         
         print(f"Connecting to stream at {host}:{port}...")
         
         try:
             for frame_idx, frame_array in self.client.receive_stream(host, port):
+                # Start audio playback once we have audio data and first frame
+                if not audio_started and self.client.audio_data and frame_idx == 0:
+                    try:
+                        import tempfile
+                        import os
+                        # Write audio to temp file for pygame to play
+                        audio_temp_file = tempfile.NamedTemporaryFile(
+                            suffix='.mp3', delete=False
+                        )
+                        audio_temp_file.write(self.client.audio_data)
+                        audio_temp_file.close()
+                        
+                        pygame.mixer.music.load(audio_temp_file.name)
+                        pygame.mixer.music.play()
+                        audio_started = True
+                        print("  Audio playback started")
+                    except Exception as e:
+                        print(f"  Audio playback error: {e}")
+                
                 # Initialize display on first frame
                 if screen is None:
                     height, width = frame_array.shape[:2]
@@ -901,6 +1025,14 @@ class SanchezStreamPlayer:
                         elif event.key == pygame.K_i:
                             stats = self.client.get_stats()
                             print(f"\nStream stats: {stats}")
+                        elif event.key == pygame.K_m:
+                            # Mute/unmute audio
+                            if pygame.mixer.music.get_volume() > 0:
+                                pygame.mixer.music.set_volume(0)
+                                print("  Audio muted")
+                            else:
+                                pygame.mixer.music.set_volume(1.0)
+                                print("  Audio unmuted")
                 
                 if not running:
                     break
@@ -924,7 +1056,16 @@ class SanchezStreamPlayer:
             print("\nPlayback stopped")
         finally:
             self.client.stop()
+            pygame.mixer.music.stop()
             pygame.quit()
+            
+            # Clean up temp audio file
+            if audio_temp_file:
+                try:
+                    import os
+                    os.unlink(audio_temp_file.name)
+                except:
+                    pass
             
             stats = self.client.get_stats()
             print(f"Playback complete. Frames: {frame_count}, Stats: {stats}")
@@ -965,6 +1106,8 @@ def stream_client(
     output_path: Optional[str] = None
 ) -> None:
     """Receive a stream (optionally save to file)"""
+    from pathlib import Path
+    
     mode_map = {
         'tcp': StreamMode.TCP_UNICAST,
         'udp': StreamMode.UDP_UNICAST,
@@ -994,6 +1137,13 @@ def stream_client(
         if sanchez:
             sanchez.save(output_path)
             print(f"\nSaved to: {output_path}")
+            
+            # Also save audio if received
+            if client.audio_data:
+                audio_path = Path(output_path).with_suffix('.mp3')
+                with open(audio_path, 'wb') as f:
+                    f.write(client.audio_data)
+                print(f"Saved audio to: {audio_path}")
     else:
         # Play stream
         player = SanchezStreamPlayer(mode=stream_mode)

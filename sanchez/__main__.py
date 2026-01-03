@@ -183,7 +183,8 @@ def cmd_stream_serve(args):
         host=args.host,
         port=args.port,
         loop=args.loop,
-        satellite_mode=args.satellite
+        satellite_mode=args.satellite,
+        audio_path=getattr(args, 'audio', None)
     )
 
 
@@ -202,6 +203,7 @@ def cmd_stream_receive(args):
     if args.output:
         # Save stream to file
         from .format import SanchezFile
+        from pathlib import Path
         
         client = SanchezStreamClient(mode=stream_mode)
         sanchez = None
@@ -225,6 +227,13 @@ def cmd_stream_receive(args):
         if sanchez:
             sanchez.save(args.output)
             print(f"\nSaved to: {args.output}")
+            
+            # Also save audio if received
+            if client.audio_data:
+                audio_path = Path(args.output).with_suffix('.mp3')
+                with open(audio_path, 'wb') as f:
+                    f.write(client.audio_data)
+                print(f"Saved audio to: {audio_path}")
     else:
         # Play stream directly
         player = SanchezStreamPlayer(mode=stream_mode, scale=args.scale)
@@ -299,6 +308,7 @@ Streaming Examples:
     # Stream serve command
     serve_parser = subparsers.add_parser('serve', help='Stream .sanchez file over network')
     serve_parser.add_argument('input', help='Input .sanchez file to stream')
+    serve_parser.add_argument('-a', '--audio', help='Audio file to stream (auto-detects .mp3 with same name)')
     serve_parser.add_argument('-H', '--host', default='0.0.0.0', help='Host/IP to bind (default: 0.0.0.0)')
     serve_parser.add_argument('-p', '--port', type=int, default=9999, help='Port number (default: 9999)')
     serve_parser.add_argument('-m', '--mode', default='tcp', 
