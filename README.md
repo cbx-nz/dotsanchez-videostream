@@ -362,6 +362,129 @@ Packet Types:
 - `0x41` AUDIO_CHUNK - Audio data chunk
 - `0xFF` END_STREAM - Stream termination
 
+## 🎬 Live Streaming
+
+Stream live video feeds directly - cameras, screens, windows, or video files without pre-conversion!
+
+### Interactive Feed Picker
+
+Run without arguments to see a nice UI listing all available feeds:
+
+```bash
+python -m sanchez live
+```
+
+```
+============================================================
+  🎬 Sanchez Live Feed Selector
+============================================================
+
+  Discovering available feeds...
+
+  📷 Cameras (2 found):
+     [1] Camera 0 (1280x720)
+     [2] Camera 1 (640x480)
+
+  🖥️  Screens (3 found):
+     [3] All Screens (3840x1080)
+     [4] Screen 1 (1920x1080)
+     [5] Screen 2 (1920x1080)
+
+  🪟 Windows (5 found):
+     [6] Visual Studio Code
+     [7] Google Chrome
+     [8] Discord
+     ...
+
+  [0] Enter video file path
+  [q] Quit
+
+------------------------------------------------------------
+  Select feed number: _
+```
+
+### Command Line Live Streaming
+
+```bash
+# Stream a video file directly (no .sanchez conversion needed)
+python -m sanchez live video.mp4
+
+# Stream from camera (default: camera 0)
+python -m sanchez live --camera
+python -m sanchez live --camera 1
+
+# Stream screen capture (default: all screens)
+python -m sanchez live --screen
+python -m sanchez live --screen 1
+
+# Stream a specific window by title
+python -m sanchez live --window "Visual Studio Code"
+
+# With options
+python -m sanchez live --camera -p 8080 --fps 30 -r 1280x720
+python -m sanchez live video.mp4 -m multicast -H 239.0.0.1 --loop
+```
+
+### Live Streaming Options
+
+| Option | Description |
+|--------|-------------|
+| `--camera [ID]` | Stream from camera device (default: 0) |
+| `--screen [ID]` | Stream screen capture (default: 0 = all screens) |
+| `--window TITLE` | Stream a specific window by title |
+| `-H, --host` | Host/IP to stream to (default: 0.0.0.0) |
+| `-p, --port` | Port number (default: 9999) |
+| `-m, --mode` | tcp, udp, multicast, or broadcast |
+| `--fps` | Frames per second (default: 24) |
+| `-r, --resize` | Resize output (e.g., 1280x720) |
+| `--loop` | Loop video files continuously |
+
+### Python Live Streaming API
+
+```python
+from sanchez import (
+    LiveStreamServer,
+    FeedCapture,
+    FeedDiscovery,
+    VideoFeed,
+    FeedType,
+    interactive_feed_picker,
+    StreamMode
+)
+
+# Discover available feeds
+feeds = FeedDiscovery.discover_all()
+print(f"Cameras: {feeds['cameras']}")
+print(f"Screens: {feeds['screens']}")
+print(f"Windows: {feeds['windows']}")
+
+# Stream from camera
+from sanchez import stream_camera
+stream_camera(device_id=0, host="0.0.0.0", port=9999, fps=24)
+
+# Stream screen capture
+from sanchez import stream_screen
+stream_screen(monitor_id=0, host="0.0.0.0", port=9999, fps=15)
+
+# Stream video file directly
+from sanchez import stream_video_file
+stream_video_file("video.mp4", host="0.0.0.0", port=9999, loop=True)
+
+# Custom feed handling
+feed = VideoFeed(
+    feed_type=FeedType.CAMERA,
+    name="Webcam",
+    description="USB Camera",
+    device_id=0
+)
+
+capture = FeedCapture(feed, fps=24)
+with capture:
+    for frame in capture.frames():
+        # Process each frame (numpy RGB array)
+        process_frame(frame)
+```
+
 ## Example
 
 Run the example script to see the format in action:

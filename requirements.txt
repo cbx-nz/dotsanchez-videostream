@@ -11,6 +11,9 @@ pygame>=2.1.0
 # For simple viewer fallback (usually included with Python)
 Pillow>=8.0.0
 
+# For screen capture in live streaming
+mss>=6.0.0
+
 # Note: ffmpeg must be installed separately for audio extraction/muxing
 # Windows: choco install ffmpeg  OR  download from https://ffmpeg.org
 # Mac: brew install ffmpeg

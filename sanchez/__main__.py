@@ -244,6 +244,107 @@ def cmd_stream_receive(args):
         )
 
 
+def cmd_live(args):
+    """Stream live video feeds"""
+    from .live import (
+        LiveStreamServer, FeedCapture, VideoFeed, FeedType,
+        interactive_feed_picker, stream_video_file, stream_camera, stream_screen
+    )
+    from .streaming import StreamMode
+    
+    # Parse resize
+    resize = None
+    if args.resize:
+        parts = args.resize.lower().split('x')
+        resize = (int(parts[0]), int(parts[1]))
+    
+    mode_map = {
+        'tcp': StreamMode.TCP_UNICAST,
+        'udp': StreamMode.UDP_UNICAST,
+        'multicast': StreamMode.UDP_MULTICAST,
+        'broadcast': StreamMode.UDP_BROADCAST
+    }
+    stream_mode = mode_map.get(args.mode.lower(), StreamMode.TCP_UNICAST)
+    
+    feed = None
+    
+    # Determine feed source
+    if args.input:
+        # Video file specified
+        from pathlib import Path
+        if not Path(args.input).exists():
+            print(f"Error: File not found: {args.input}")
+            sys.exit(1)
+        
+        feed = VideoFeed(
+            feed_type=FeedType.VIDEO_FILE,
+            name=Path(args.input).name,
+            description=f"Video file: {args.input}",
+            file_path=args.input
+        )
+    
+    elif args.camera is not None:
+        # Camera specified
+        feed = VideoFeed(
+            feed_type=FeedType.CAMERA,
+            name=f"Camera {args.camera}",
+            description=f"Camera device {args.camera}",
+            device_id=args.camera
+        )
+    
+    elif args.screen is not None:
+        # Screen capture specified
+        name = "All Screens" if args.screen == 0 else f"Screen {args.screen}"
+        feed = VideoFeed(
+            feed_type=FeedType.SCREEN,
+            name=name,
+            description=f"Screen capture: {name}",
+            monitor_id=args.screen
+        )
+    
+    elif args.window:
+        # Window capture specified
+        feed = VideoFeed(
+            feed_type=FeedType.WINDOW,
+            name=args.window[:50],
+            description=f"Window: {args.window}",
+            window_title=args.window
+        )
+    
+    else:
+        # No source specified - show interactive picker
+        feed = interactive_feed_picker()
+        if feed is None:
+            print("No feed selected.")
+            sys.exit(0)
+    
+    # Start streaming
+    server = LiveStreamServer(mode=stream_mode)
+    
+    if feed.feed_type == FeedType.VIDEO_FILE and args.loop:
+        # Loop video files
+        while True:
+            try:
+                server.stream_feed(
+                    feed,
+                    host=args.host,
+                    port=args.port,
+                    fps=args.fps,
+                    resize=resize
+                )
+                print("\n   Looping video...")
+            except KeyboardInterrupt:
+                break
+    else:
+        server.stream_feed(
+            feed,
+            host=args.host,
+            port=args.port,
+            fps=args.fps,
+            resize=resize
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Sanchez - Interdimensional Cable Video Format',
@@ -267,6 +368,13 @@ Streaming Examples:
   Receive and play:       python -m sanchez receive 192.168.1.100 9999
   Receive multicast:      python -m sanchez receive 239.0.0.1 9999 -m multicast
   Save stream to file:    python -m sanchez receive 192.168.1.100 9999 -o recorded.sanchez
+
+Live Streaming Examples:
+  Interactive feed picker: python -m sanchez live
+  Stream MP4 directly:     python -m sanchez live video.mp4
+  Stream camera:           python -m sanchez live --camera 0
+  Stream screen:           python -m sanchez live --screen 0
+  Stream all screens:      python -m sanchez live --screen
         """
     )
     
@@ -329,6 +437,24 @@ Streaming Examples:
     receive_parser.add_argument('-s', '--scale', type=float, default=1.0, help='Display scale')
     receive_parser.add_argument('--fullscreen', action='store_true', help='Fullscreen playback')
     
+    # Live streaming command
+    live_parser = subparsers.add_parser('live', help='Stream live video feeds (camera, screen, video file)')
+    live_parser.add_argument('input', nargs='?', help='Video file to stream (or use --camera/--screen)')
+    live_parser.add_argument('--camera', type=int, nargs='?', const=0, metavar='ID',
+                             help='Stream from camera (default: 0)')
+    live_parser.add_argument('--screen', type=int, nargs='?', const=0, metavar='ID',
+                             help='Stream screen capture (default: 0 = all screens)')
+    live_parser.add_argument('--window', type=str, metavar='TITLE',
+                             help='Stream a specific window by title')
+    live_parser.add_argument('-H', '--host', default='0.0.0.0', help='Host/IP to bind (default: 0.0.0.0)')
+    live_parser.add_argument('-p', '--port', type=int, default=9999, help='Port number (default: 9999)')
+    live_parser.add_argument('-m', '--mode', default='tcp',
+                             choices=['tcp', 'udp', 'multicast', 'broadcast'],
+                             help='Streaming mode (default: tcp)')
+    live_parser.add_argument('--fps', type=int, default=24, help='Frames per second (default: 24)')
+    live_parser.add_argument('-r', '--resize', help='Resize to WxH (e.g., 1280x720)')
+    live_parser.add_argument('--loop', action='store_true', help='Loop video file')
+    
     args = parser.parse_args()
     
     if args.command == 'encode':
@@ -343,6 +469,8 @@ Streaming Examples:
         cmd_stream_serve(args)
     elif args.command == 'receive':
         cmd_stream_receive(args)
+    elif args.command == 'live':
+        cmd_live(args)
     else:
         parser.print_help()
         sys.exit(1)
