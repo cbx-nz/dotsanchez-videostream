@@ -1,7 +1,7 @@
 # .sanchez Video Format
 
 > pip i sanchez==2.5.5 (only works on Python 3.13)
-\n
+<br>
 **Interdimensional Cable Video Format** - A custom video format inspired by Rick & Morty
 
 > "Nobody exists on purpose. Nobody belongs anywhere. Everybody's gonna die. Come watch TV." - Morty
