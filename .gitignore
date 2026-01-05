@@ -5,3 +5,8 @@ prompt.txt
 sanchez/__pycache__/
 test_output/
 *.mp3
+videos/
+*.json
+*.txt
+*.m3u
+*.pls
