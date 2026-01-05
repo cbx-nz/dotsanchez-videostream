@@ -306,7 +306,8 @@ class SanchezStreamServer:
         port: int = 9999,
         loop: bool = False,
         satellite_mode: bool = False,
-        audio_path: Optional[str] = None
+        audio_path: Optional[str] = None,
+        frame_processor: Optional[Callable] = None
     ) -> None:
         """
         Stream a .sanchez file with optional audio.
@@ -318,8 +319,13 @@ class SanchezStreamServer:
             loop: Loop the video continuously
             satellite_mode: Enable satellite optimizations (smaller chunks, more FEC)
             audio_path: Path to .mp3 audio file (auto-detected if None)
+            frame_processor: Optional function to process frames (e.g., add watermark)
+                            Should accept numpy array and return numpy array
         """
         from pathlib import Path
+        
+        # Store frame processor
+        self._frame_processor = frame_processor
         
         # Load the sanchez file
         print(f"Loading: {sanchez_path}")
@@ -410,6 +416,10 @@ class SanchezStreamServer:
         """Stream sanchez file to a connected TCP client"""
         frame_interval = 1.0 / sanchez.config.fps  # Time between frames
         
+        # Get frame processor if set
+        frame_processor = getattr(self, '_frame_processor', None)
+        compressor = FrameCompressor() if frame_processor else None
+        
         while self.running:
             stream_start = time.time()
             
@@ -442,8 +452,15 @@ class SanchezStreamServer:
                 
                 frame_start = time.time()
                 
-                # Get compressed frame data
-                frame_data = sanchez._frames[frame_idx].encode('utf-8')
+                # Get frame data - apply processor if set
+                if frame_processor:
+                    # Decompress, process, recompress
+                    frame_array = sanchez.get_frame(frame_idx)
+                    frame_array = frame_processor(frame_array)
+                    frame_data = compressor.compress_frame(frame_array).encode('utf-8')
+                else:
+                    # Use pre-compressed data
+                    frame_data = sanchez._frames[frame_idx].encode('utf-8')
                 
                 # Send frame in chunks
                 self._send_frame_chunks(client_sock, frame_idx, frame_data, addr)
@@ -589,6 +606,10 @@ class SanchezStreamServer:
         self.running = True
         frame_interval = 1.0 / sanchez.config.fps
         
+        # Get frame processor if set
+        frame_processor = getattr(self, '_frame_processor', None)
+        compressor = FrameCompressor() if frame_processor else None
+        
         try:
             while self.running:
                 stream_start = time.time()
@@ -623,7 +644,16 @@ class SanchezStreamServer:
                         break
                     
                     frame_start = time.time()
-                    frame_data = sanchez._frames[frame_idx].encode('utf-8')
+                    
+                    # Get frame data - apply processor if set
+                    if frame_processor:
+                        # Decompress, process, recompress
+                        frame_array = sanchez.get_frame(frame_idx)
+                        frame_array = frame_processor(frame_array)
+                        frame_data = compressor.compress_frame(frame_array).encode('utf-8')
+                    else:
+                        # Use pre-compressed data
+                        frame_data = sanchez._frames[frame_idx].encode('utf-8')
                     
                     self._send_frame_chunks(None, frame_idx, frame_data, addr)
                     

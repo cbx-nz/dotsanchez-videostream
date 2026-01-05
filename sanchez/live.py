@@ -360,6 +360,11 @@ class LiveStreamServer:
         self.mode = mode or StreamMode.TCP_UNICAST
         self._server = SanchezStreamServer(mode=self.mode)
         self.running = False
+        self._frame_processor = None
+    
+    def set_frame_processor(self, processor):
+        """Set a frame processor function (e.g., for watermarks)"""
+        self._frame_processor = processor
     
     def stream_feed(
         self,
@@ -368,7 +373,8 @@ class LiveStreamServer:
         port: int = 9999,
         fps: int = 24,
         resize: Optional[Tuple[int, int]] = None,
-        quality: int = 80
+        quality: int = 80,
+        frame_processor = None
     ) -> None:
         """
         Stream a live feed over network.
@@ -380,11 +386,16 @@ class LiveStreamServer:
             fps: Target frames per second
             resize: Optional (width, height) to resize frames
             quality: JPEG quality for compression (1-100)
+            frame_processor: Optional function to process frames (e.g., watermark)
         """
         from .streaming import StreamPacket, PacketType, StreamMode
         from .format import SanchezMetadata, SanchezConfig, FrameCompressor
         import socket
         import struct
+        
+        # Use provided processor or instance processor
+        if frame_processor:
+            self._frame_processor = frame_processor
         
         capture = FeedCapture(feed, fps=fps)
         
@@ -456,6 +467,10 @@ class LiveStreamServer:
             for frame in capture.frames():
                 if resize:
                     frame = cv2.resize(frame, resize)
+                
+                # Apply frame processor (e.g., watermark) if set
+                if self._frame_processor:
+                    frame = self._frame_processor(frame)
                 
                 height, width = frame.shape[:2]
                 
@@ -566,6 +581,10 @@ class LiveStreamServer:
             for frame in capture.frames():
                 if resize:
                     frame = cv2.resize(frame, resize)
+                
+                # Apply frame processor (e.g., watermark) if set
+                if self._frame_processor:
+                    frame = self._frame_processor(frame)
                 
                 height, width = frame.shape[:2]
                 

@@ -485,6 +485,570 @@ with capture:
         process_frame(frame)
 ```
 
+## 📺 TV Channels & Playlists
+
+Stream multiple videos sequentially like a TV channel! Mix `.sanchez` and `.mp4` files in playlists for continuous streaming.
+
+### Channel Guide (Receiver Side)
+
+Save your favorite channels and quickly tune in with an interactive selector!
+
+#### Managing Channels
+
+```bash
+# Add a channel
+python -m sanchez channels add "Rick's TV" 192.168.1.100 9999
+
+# Add a multicast/satellite channel
+python -m sanchez channels add "Satellite TV" 239.0.0.1 9999 -m multicast
+
+# Add with description and mark as favorite
+python -m sanchez channels add "Local News" 192.168.1.50 8080 -d "Morning news" -f
+
+# List all saved channels
+python -m sanchez channels list
+
+# Remove a channel
+python -m sanchez channels remove "Rick's TV"
+
+# Toggle favorite status
+python -m sanchez channels favorite "Satellite TV"
+```
+
+#### Watching Channels
+
+```bash
+# Interactive channel selector (with arrow key navigation!)
+python -m sanchez watch
+
+# Watch by channel name
+python -m sanchez watch "Rick's TV"
+
+# Watch by channel number
+python -m sanchez watch 1
+
+# Watch in fullscreen
+python -m sanchez watch "Rick's TV" --fullscreen
+
+# Record a channel to file
+python -m sanchez watch "Rick's TV" -o recording.sanchez
+```
+
+#### Interactive Channel Selector
+
+Run `python -m sanchez watch` to get a nice interactive UI:
+
+```
+============================================================
+  📺 Sanchez Channel Guide
+============================================================
+
+  ▶ [1] ⭐ 📺 Rick's TV                192.168.1.100:9999 (tcp)
+    [2] ⭐ 📺 Satellite Feed           239.0.0.1:9999 (multicast)
+    [3]    🔗 Local Server             localhost:9999 (tcp)
+    [4]    📡 UDP Stream               10.0.0.5:8080 (udp)
+
+------------------------------------------------------------
+  ↑/↓  Navigate   |  Enter  Select  |  0-9  Channel #
+  Q    Quit       |  A      Add New |  F    Toggle Favorite
+============================================================
+```
+
+**3-Digit Channel Entry:**
+
+When you press number keys, a channel input overlay appears in the bottom-right:
+
+```
+                                        ┌─────────────┐
+                                        │  CH: 12_   │
+                                        │  ██████░░░░  │
+                                        └─────────────┘
+```
+
+- Type up to **3 digits** to enter a channel number (supports channels 1-999)
+- A **countdown bar** shows time remaining before auto-tuning
+- After **2 seconds** of no input, automatically tunes to that channel
+- If you enter 3 digits, it tunes **immediately**
+- Press **Backspace** to correct mistakes
+- The overlay disappears after tuning
+
+**Navigation:**
+- Use **↑/↓ arrow keys** to navigate
+- Press **Enter** to watch the selected channel
+- Press **0-9** to enter channel numbers (with overlay)
+- Press **F** to toggle favorite (favorites appear first with ⭐)
+- Press **Q** to quit
+
+#### Python Channel Guide API
+
+```python
+from sanchez import ChannelGuide, SavedChannel, interactive_channel_selector
+
+# Create/load channel guide
+guide = ChannelGuide()
+
+# Add a channel
+channel = SavedChannel(
+    name="Rick's TV",
+    host="192.168.1.100",
+    port=9999,
+    mode="tcp",
+    description="Interdimensional Cable",
+    favorite=True
+)
+guide.add(channel)
+
+# List channels
+for ch in guide.list_channels():
+    print(f"{ch.name}: {ch.connection_string()}")
+
+# Get channel by name or number
+ch = guide.get("Rick's TV")
+ch = guide.get_by_index(1)
+
+# Interactive selector
+selected = interactive_channel_selector()
+if selected:
+    print(f"Tuning to: {selected.name}")
+```
+
+### Playlist Formats
+
+The channel feature supports multiple playlist formats:
+
+| Format | Extension | Description |
+|--------|-----------|-------------|
+| **M3U** | `.m3u` | Standard playlist format (media players compatible) |
+| **JSON** | `.json` | Structured playlist with metadata |
+| **Text** | `.txt` | Simple list of file paths (one per line) |
+| **PLS** | `.pls` | Winamp-style playlist format |
+
+### Creating Playlists
+
+**M3U Format** (`playlist.m3u`):
+```m3u
+#EXTM3U
+#EXTINF:-1,Episode 1 - Pilot
+/videos/episode1.sanchez
+#EXTINF:-1,Episode 2 - Ricksy Business
+/videos/episode2.mp4
+#EXTINF:-1,Interdimensional Cable
+/videos/cable.sanchez
+```
+
+**JSON Format** (`playlist.json`):
+```json
+{
+  "name": "Rick's TV Channel",
+  "mode": "shuffle_repeat",
+  "items": [
+    {"path": "/videos/episode1.sanchez", "name": "Pilot"},
+    {"path": "/videos/episode2.mp4", "name": "Ricksy Business"},
+    {"path": "/videos/cable.sanchez", "name": "Interdimensional Cable"}
+  ]
+}
+```
+
+**Text Format** (`playlist.txt`):
+```
+/videos/episode1.sanchez
+/videos/episode2.mp4
+/videos/cable.sanchez
+```
+
+### Playlist Modes
+
+| Mode | Description |
+|------|-------------|
+| `sequential` | Play videos in order, then stop (default) |
+| `shuffle` | Randomize order, play once |
+| `repeat_one` | Loop the current video forever |
+| `repeat_all` | Loop the entire playlist forever |
+| `shuffle_repeat` | Shuffle and repeat forever |
+
+### Command Line Channel Streaming
+
+```bash
+# Stream a playlist file
+python -m sanchez channel --playlist videos.m3u
+
+# Stream multiple video files directly
+python -m sanchez channel video1.sanchez video2.mp4 video3.sanchez
+
+# Shuffle mode
+python -m sanchez channel --playlist tv.m3u --shuffle
+
+# Repeat all videos forever
+python -m sanchez channel --playlist tv.m3u --playlist-mode repeat_all
+
+# Shuffle and repeat forever (TV station mode!)
+python -m sanchez channel --playlist tv.m3u --playlist-mode shuffle_repeat
+
+# Named channel with multicast
+python -m sanchez channel --playlist tv.m3u -n "Rick's TV" -m multicast -H 239.0.0.1
+
+# Stream all .sanchez files in a folder
+python -m sanchez channel *.sanchez --playlist-mode repeat_all
+
+# With channel text overlay
+python -m sanchez channel --playlist tv.m3u --overlay "SPORTS TV" --overlay-position top-left
+
+# Per-video text overlays (e.g., show "LIVE" for sports videos)
+python -m sanchez channel *.sanchez --video-overlays "sports*.mp4:LIVE SPORTS" "news*.sanchez:BREAKING NEWS"
+
+# Custom styling
+python -m sanchez channel --playlist tv.m3u --overlay "MY CHANNEL" \
+    --overlay-position top-right --overlay-opacity 0.9 \
+    --overlay-size 32 --overlay-color "255,0,0"
+
+# Dynamic queue - add videos while streaming
+python -m sanchez channel --playlist tv.m3u --queue-file queue.txt
+# Then add videos by appending paths to queue.txt
+```
+
+### Channel Options
+
+| Option | Description |
+|--------|-------------|
+| `--playlist, -P` | Path to playlist file (.m3u, .json, .txt, .pls) |
+| `-n, --name` | Channel name (displayed in console) |
+| `--shuffle` | Shuffle playlist order |
+| `--playlist-mode` | sequential, shuffle, repeat_one, repeat_all, shuffle_repeat |
+| `-H, --host` | Host/IP to stream to (default: 0.0.0.0) |
+| `-p, --port` | Port number (default: 9999) |
+| `-m, --mode` | tcp, udp, multicast, or broadcast |
+| `--fps` | Frames per second for .mp4 conversion (default: 24) |
+| `-r, --resize` | Resize all videos (e.g., 1280x720) |
+| `-o, --overlay` | Text overlay for channel branding |
+| `--overlay-position` | Position: top-left, top-right, bottom-left, bottom-right, center, top-center, bottom-center |
+| `--overlay-opacity` | Text opacity 0.0-1.0 (default: 0.8) |
+| `--overlay-size` | Font size in pixels (default: 24) |
+| `--overlay-color` | RGB color as R,G,B (default: 255,255,255) |
+| `--video-overlays` | Per-video text overlays (pattern:text format) |
+| `-l, --logo` | PNG logo overlay (supports transparency) |
+| `--logo-position` | Logo position (default: top-left) |
+| `--logo-opacity` | Logo opacity 0.0-1.0 (default: 0.8) |
+| `--logo-scale` | Logo scale factor (default: 1.0) |
+| `--video-logos` | Per-video PNG logos (pattern:path format) |
+| `-q, --queue-file` | File to watch for adding videos to queue |
+
+### 📝 Dynamic Text Overlays
+
+Add dynamic text overlays to your streams - change text, position, and style while streaming!
+
+**CLI Examples:**
+
+```bash
+# Simple channel branding
+python -m sanchez channel --playlist tv.m3u --overlay "MY CHANNEL"
+
+# Sports channel with custom position and color
+python -m sanchez channel sports/*.mp4 --overlay "SPORTS TV" \
+    --overlay-position top-right --overlay-color "255,255,0" --overlay-size 28
+
+# Per-video overlays (different text for different content)
+python -m sanchez channel --playlist mixed.m3u \
+    --overlay "NEWS 24/7" \
+    --video-overlays "sports*.mp4:LIVE SPORTS" "weather*.mp4:WEATHER UPDATE"
+```
+
+**Python API - Full Control:**
+
+```python
+from sanchez import ChannelServer, Playlist, OverlayManager
+
+# Create a channel server with text overlays
+server = ChannelServer()
+
+# Set main channel overlay
+server.set_overlay("SPORTS TV", position="top-left", font_size=28, color=(255, 255, 0))
+
+# Add additional overlays (score, status, etc.)
+server.add_overlay("score", "HOME 0 - 0 AWAY", position="top-center", font_size=24)
+server.add_overlay("status", "LIVE", position="top-right", color=(255, 0, 0))
+
+# Set per-video overlays
+server.set_video_overlay("halftime*.mp4", "HALFTIME", position="center")
+
+# Stream the playlist
+playlist = Playlist.load("games.m3u")
+server.stream_playlist(playlist, host="0.0.0.0", port=9999)
+```
+
+**Dynamic Text Updates (during streaming):**
+
+```python
+import threading
+import time
+
+# Start streaming in background
+def stream():
+    server.stream_playlist(playlist)
+
+thread = threading.Thread(target=stream)
+thread.start()
+
+# Update overlays dynamically while streaming!
+time.sleep(60)
+server.set_text("score", "HOME 1 - 0 AWAY")  # Update score
+
+time.sleep(300)
+server.set_text("status", "2ND HALF")  # Update status
+
+time.sleep(600)
+server.set_default_text("SPORTS TV - GOAL!")  # Flash message on main overlay
+```
+
+**Advanced OverlayManager:**
+
+```python
+from sanchez import OverlayManager
+
+# Create overlay manager for fine-grained control
+manager = OverlayManager()
+
+# Add multiple overlays
+manager.add_overlay("channel", "ESPN", position="top-left", font_size=32)
+manager.add_overlay("ticker", "Breaking: Big game tonight!", position="bottom-center", font_size=18)
+manager.add_overlay("time", "LIVE", position="top-right", color=(255, 0, 0))
+
+# Update text dynamically
+manager.set_text("ticker", "Score update: Home leads 2-1")
+manager.set_position("ticker", "bottom-left")
+manager.set_color("time", (0, 255, 0))  # Change to green
+
+# Remove an overlay
+manager.remove_overlay("ticker")
+
+# Apply to frames manually
+frame = manager.apply(frame)
+```
+
+### �️ PNG Logo Overlays
+
+Add transparent PNG logos to your streams - perfect for channel branding with professional graphics!
+
+**CLI Examples:**
+
+```bash
+# Simple channel logo (top-left corner)
+python -m sanchez channel --playlist tv.m3u --logo "logo.png"
+
+# Logo with custom position and opacity
+python -m sanchez channel sports/*.mp4 --logo "espn_logo.png" \
+    --logo-position top-right --logo-opacity 0.9 --logo-scale 0.5
+
+# Combine text overlay AND logo
+python -m sanchez channel --playlist news.m3u \
+    --logo "news_logo.png" --logo-position top-left \
+    --overlay "BREAKING NEWS" --overlay-position bottom-center
+
+# Per-video logos (different logos for different content)
+python -m sanchez channel --playlist mixed.m3u \
+    --logo "main_logo.png" \
+    --video-logos "sports*.mp4:sports_logo.png" "news*.mp4:news_logo.png"
+```
+
+**Python API - Full Control:**
+
+```python
+from sanchez import ChannelServer, Playlist, ImageOverlay
+
+# Create a channel server with PNG logo
+server = ChannelServer()
+
+# Set main channel logo
+server.add_logo("logo.png", position="top-left", opacity=0.9, scale=0.5)
+
+# Add per-video logos (different logos for different content)
+server.add_video_logo("sports*.mp4", "sports_logo.png")
+server.add_video_logo("news*.mp4", "news_logo.png")
+
+# Combine with text overlays
+server.set_overlay("LIVE", position="top-right", color=(255, 0, 0))
+
+# Stream the playlist
+playlist = Playlist.load("channel.m3u")
+server.stream_playlist(playlist, host="0.0.0.0", port=9999)
+```
+
+**ImageOverlay Direct Usage:**
+
+```python
+from sanchez import ImageOverlay, OverlayManager
+
+# Create image overlay directly
+logo = ImageOverlay(
+    image_path="logo.png",
+    position="top-left",
+    opacity=0.8,
+    scale=0.5
+)
+
+# Load the image
+logo.load()
+
+# Add to overlay manager
+manager = OverlayManager()
+manager.add_image("channel_logo", logo)
+
+# Apply to frames
+frame = manager.apply(frame)
+```
+
+**Supported Image Formats:**
+- PNG (recommended - supports transparency)
+- JPEG, JPG (no transparency)
+- BMP, WEBP, and other formats supported by PIL/OpenCV
+
+**Tips:**
+- Use PNG with transparency for professional-looking overlays
+- Scale down large logos for better performance
+- Combine multiple logos and text overlays for rich branding
+- Use per-video logos to match content (sports logo for sports, news logo for news, etc.)
+
+### �📥 Dynamic Queue Management
+
+Add, skip, and change videos while the channel is streaming - perfect for live TV stations!
+
+**Queue File Method:**
+
+```bash
+# Start streaming with queue file watching
+python -m sanchez channel --playlist initial.m3u --queue-file queue.txt
+
+# In another terminal, add videos to the queue:
+echo "/path/to/new_video.mp4" >> queue.txt
+echo "/path/to/another.sanchez" >> queue.txt
+```
+
+**Python Queue API:**
+
+```python
+from sanchez import Playlist, ChannelServer
+import threading
+
+# Create playlist
+playlist = Playlist.load("initial.m3u")
+
+# Watch a file for new videos
+playlist.watch_queue_file("queue.txt")
+
+# Add videos programmatically (thread-safe)
+playlist.add("/path/to/new_video.mp4")  # Add to end of queue
+playlist.add_next("/path/to/priority.mp4")  # Play next (after current video)
+
+# Control playback
+playlist.skip_current()  # Skip to next video immediately
+playlist.jump_to(5)  # Jump to video at index 5
+playlist.jump_to_title("Breaking News")  # Jump to video by title (partial match)
+playlist.replace_current("/path/to/replacement.mp4")  # Replace currently playing
+playlist.insert_and_play("/path/to/urgent.mp4")  # Insert and immediately play
+
+# Query the queue
+upcoming = playlist.get_queue()  # Get list of upcoming videos
+playlist.clear_queue()  # Clear all videos after current one
+
+threading.Thread(target=add_video_later).start()
+
+# Start streaming
+server = ChannelServer()
+server.stream_playlist(playlist)
+```
+
+### Python Channel API
+
+```python
+from sanchez import (
+    Playlist,
+    PlaylistItem,
+    PlaylistMode,
+    ChannelServer,
+    create_channel,
+    stream_channel,
+    StreamMode
+)
+
+# Create a playlist from files
+playlist = create_channel([
+    "episode1.sanchez",
+    "episode2.mp4",
+    "episode3.sanchez"
+], name="My Channel", mode=PlaylistMode.SHUFFLE_REPEAT)
+
+# Or load from file
+playlist = Playlist.from_file("tv.m3u")
+playlist.mode = PlaylistMode.REPEAT_ALL
+
+# Stream the channel
+server = ChannelServer(mode=StreamMode.TCP_UNICAST)
+server.stream_channel(playlist, host="0.0.0.0", port=9999)
+
+# Multicast for satellite/IPTV
+server = ChannelServer(mode=StreamMode.UDP_MULTICAST)
+server.stream_channel(playlist, host="239.0.0.1", port=9999)
+
+# Quick stream helper
+stream_channel(
+    ["video1.sanchez", "video2.mp4"],
+    host="0.0.0.0",
+    port=9999,
+    mode=PlaylistMode.REPEAT_ALL
+)
+
+# Access playlist items
+for item in playlist.items:
+    print(f"{item.name}: {item.path} ({item.file_type})")
+
+# Shuffle playlist
+playlist.shuffle()
+
+# Get next video (respects mode)
+while True:
+    item = playlist.get_next()
+    if item is None:
+        break  # End of sequential playlist
+    print(f"Now playing: {item.name}")
+```
+
+### Receiving Channel Streams
+
+Clients don't need to know about playlists - they just receive a continuous stream:
+
+```bash
+# Receive and play the channel
+python -m sanchez receive 192.168.1.100 9999
+
+# Record the stream (captures all videos as one)
+python -m sanchez receive 192.168.1.100 9999 -o recording.sanchez
+```
+
+### Example: 24/7 TV Station
+
+Set up a continuous TV channel streaming all your `.sanchez` files:
+
+```bash
+# Create a playlist of all videos
+ls *.sanchez > channel.txt
+
+# Or create an M3U with nice names
+cat > channel.m3u << EOF
+#EXTM3U
+#EXTINF:-1,Episode 1
+episode1.sanchez
+#EXTINF:-1,Episode 2
+episode2.sanchez
+#EXTINF:-1,Interdimensional Cable
+cable.sanchez
+EOF
+
+# Start the 24/7 channel
+python -m sanchez channel --playlist channel.m3u \
+    --playlist-mode shuffle_repeat \
+    -n "Interdimensional Cable TV" \
+    -m multicast -H 239.0.0.1
+```
+
 ## Example
 
 Run the example script to see the format in action:
