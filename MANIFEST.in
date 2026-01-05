@@ -2,5 +2,7 @@ include README.md
 include LICENSE
 include requirements.txt
 include pyproject.toml
+include setup.py
+include .gitignore
 recursive-include src/sanchez *.py
 recursive-include src/sanchez py.typed
