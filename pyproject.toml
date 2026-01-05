@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dotsanchez"
+version = "2.5.0"
+description = "Interdimensional Cable Video Format - A custom video format inspired by Rick & Morty"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "cbx"}
+]
+keywords = ["video", "format", "streaming", "codec", "rick-and-morty"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Video :: Conversion",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.21.0",
+    "opencv-python>=4.5.0",
+    "Pillow>=8.0.0",
+]
+
+[project.optional-dependencies]
+player = [
+    "pygame>=2.1.0",
+]
+live = [
+    "mss>=6.0.0",
+]
+all = [
+    "pygame>=2.1.0",
+    "mss>=6.0.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+]
+
+[project.scripts]
+sanchez = "sanchez.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/cbx-nz/dotsanchez-videostream"
+Repository = "https://github.com/cbx-nz/dotsanchez-videostream"
+Issues = "https://github.com/cbx-nz/dotsanchez-videostream/issues"
+
+[tool.setuptools]
+packages = ["sanchez"]
+
+[tool.setuptools.package-data]
+sanchez = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
