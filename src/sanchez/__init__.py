@@ -1,7 +1,7 @@
 # .sanchez file format - Interdimensional Cable Video Format
 # Rick & Morty inspired custom video format
 
-__version__ = "2.5.0"
+__version__ = "2.5.5"
 __author__ = "cbx"
 
 from .format import SanchezFile, SanchezMetadata, SanchezConfig

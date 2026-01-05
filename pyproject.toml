@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sanchez"
-version = "2.5.2"
+version = "2.5.5"
 description = "Interdimensional Cable Video Format - A custom video format inspired by Rick & Morty and more."
 readme = "README.md"
 license = "MIT"

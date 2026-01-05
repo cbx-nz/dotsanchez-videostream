@@ -10,3 +10,6 @@ videos/
 *.txt
 *.m3u
 *.pls
+dist/
+build/
+src/sanchez.egg-info/
